@@ -1,4 +1,4 @@
-baseline
+Baseline
 ========
 
-Starting point for my golang web services
+Starting point for [Go](http://golang.org) web services.
