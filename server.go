@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -39,6 +42,14 @@ func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
 
 func (w gzipResponseWriter) Write(b []byte) (int, error) {
 	return w.WriteCloser.Write(b)
+}
+
+func (w gzipResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("gzipResponseWriter: ResponseWriter does not satisfy http.Hijacker interface")
+	}
+	return hijacker.Hijack()
 }
 
 func (s *server) handleHealthz(w http.ResponseWriter, r *http.Request) {
