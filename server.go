@@ -49,7 +49,7 @@ func (w gzipResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if !ok {
 		return nil, nil, errors.New("gzipResponseWriter: ResponseWriter does not satisfy http.Hijacker interface")
 	}
-	return hijacker.Hijack()
+	return h.Hijack()
 }
 
 func (s *server) handleHealthz(w http.ResponseWriter, r *http.Request) {
