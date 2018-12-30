@@ -1,27 +1,46 @@
 package main
 
 import (
-	"bufio"
-	"compress/gzip"
-	"errors"
 	"fmt"
-	"io"
-	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type server struct {
-	mux *http.ServeMux
+	mux    mux
+	log    logger
+	client *http.Client
+}
+
+func useStdLibOptions() func(*server) error {
+	return func(s *server) error {
+		s.mux = http.NewServeMux()
+		s.log = newStdLogger()
+		s.client = &http.Client{Timeout: 30 * time.Second}
+		return nil
+	}
 }
 
 // newServer allocates and returns a new server.
-func newServer() http.Handler {
-	s := &server{
-		mux: http.NewServeMux(),
+func newServer(options ...func(*server) error) (*server, error) {
+	s := &server{}
+	for _, o := range options {
+		if err := o(s); err != nil {
+			return nil, err
+		}
+	}
+	if s.mux == nil {
+		return nil, fmt.Errorf("must provide an option func that specifies a mux")
+	}
+	if s.log == nil {
+		return nil, fmt.Errorf("must provide an option func that specifies a logger")
+	}
+	if s.client == nil {
+		return nil, fmt.Errorf("must provide an option func that specifies an *http.Client")
 	}
 	s.init()
-	return s
+	return s, nil
 }
 
 // init sets up a server by performing tasks like mapping
@@ -30,35 +49,13 @@ func (s *server) init() {
 	s.mux.HandleFunc("/healthz", s.handleHealthz)
 }
 
-type gzipResponseWriter struct {
-	io.WriteCloser
-	http.ResponseWriter
-}
-
-func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
-	gz := gzip.NewWriter(w)
-	return &gzipResponseWriter{WriteCloser: gz, ResponseWriter: w}
-}
-
-func (w gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.WriteCloser.Write(b)
-}
-
-func (w gzipResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	h, ok := w.ResponseWriter.(http.Hijacker)
-	if !ok {
-		return nil, nil, errors.New("gzipResponseWriter: ResponseWriter does not satisfy http.Hijacker interface")
-	}
-	return h.Hijack()
-}
-
 func (s *server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	fmt.Fprintln(w, "ok")
 }
 
-// ServeHTTP satisfies the http.Handler interface for a server. It
-// will compress all responses if the appropriate request headers are set.
+// ServeHTTP satisfies the http.Handler interface. It will compress all
+// responses if the appropriate request headers are set.
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 		s.mux.ServeHTTP(w, r)
